@@ -1091,52 +1091,34 @@ export async function fetchJaneStreet(c: CompanyConfig): Promise<NormalizedJob[]
 
 export const FEED_UNAVAILABLE = Symbol("FEED_UNAVAILABLE");
 
-// Location scope, added 2026-09-08 per user request: this tracker is
-// US-openings-only. ATS feeds report location in wildly inconsistent
-// formats (full "City, State", bare city names, country codes, ";"-joined
-// multi-office lists, or a "N Locations" placeholder with no actual text),
-// so this is a heuristic, not an exact geo lookup:
-//   - A ";"-separated location string counts as US if ANY segment looks US
-//     (a multi-office posting is relevant to a US applicant if one of the
-//     offices is in the US).
-//   - A segment is foreign if it names a non-US country/city/region — see
-//     NON_US_LOCATION_RE. This list is necessarily incomplete; extend it
-//     when a new foreign city/country slips through.
-//   - A segment is US if it names the US explicitly, a full US state name,
-//     a US state abbreviation adjacent to a comma/hyphen/parenthesis (not a
-//     bare 2-letter match, to avoid false hits from words like "in"/"or"),
-//     or "NYC"/"Remote" (Jane Street's own city-code shorthand, and a bare
-//     "Remote" with no further qualifier — most tracked companies are
-//     US-headquartered, so an unqualified "Remote" defaults to included).
-//   - Anything else uninformative (no location text, or a placeholder like
-//     "3 Locations") is kept rather than dropped — we can't confirm it's
-//     foreign, and silently hiding a real US posting is worse than
-//     occasionally showing one we can't verify.
+// Location scope: include only postings whose location explicitly identifies
+// the US. ATS feeds report location in inconsistent formats, so this is a
+// conservative heuristic rather than an exact geo lookup:
+//   - Every semicolon/pipe/newline-separated location must be explicitly US.
+//     A role listed in both US and foreign locations is not US-only.
+//   - A segment must name the US, a full US state, a US state abbreviation
+//     adjacent to a comma/hyphen/parenthesis, or NYC.
+//   - Bare "Remote", missing location data, bare/unrecognized city names, and
+//     placeholders such as "3 Locations" are not proof of US location.
 const NON_US_LOCATION_RE =
   /\b(canada|toronto|vancouver|montreal|ottawa|united kingdom|\buk\b|london|manchester|edinburgh|ireland|dublin|germany|berlin|munich|frankfurt|france|paris|netherlands|amsterdam|spain|madrid|barcelona|italy|milan|rome|switzerland|zurich|geneva|poland|warsaw|krakow|ukraine|kyiv|sweden|stockholm|denmark|copenhagen|norway|oslo|finland|helsinki|portugal|lisbon|austria|vienna|belgium|brussels|india|bengaluru|bangalore|hyderabad|mumbai|pune|gurgaon|gurugram|noida|chennai|new delhi|japan|tokyo|osaka|china|beijing|shanghai|shenzhen|hong kong|hongkong|\bhkg\b|singapore|\bsgp\b|malaysia|kuala lumpur|cyberjaya|australia|sydney|melbourne|brisbane|new zealand|auckland|mexico city|guadalajara|monterrey|\bmx\b|brazil|sao paulo|são paulo|argentina|buenos aires|\bchile\b|santiago|colombia|bogota|bogotá|\bperu\b|\blima\b|costa rica|philippines|manila|vietnam|hanoi|ho chi minh|thailand|bangkok|indonesia|jakarta|israel|tel aviv|\buae\b|dubai|abu dhabi|saudi arabia|riyadh|\begypt\b|cairo|south africa|johannesburg|cape town|south korea|\bseoul\b|taiwan|taipei|romania|bucharest|czech|prague|hungary|budapest|\bemea\b|\bapac\b|\blatam\b|\bldn\b)\b/i;
 const US_STATE_ABBR_RE =
   /(?:^|[,(-]\s*|\s-\s)(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 const US_EXPLICIT_RE =
-  /\b(united states|usa|u\.s\.a?\.?|nyc)\b|\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b/i;
+  /\b(united states|usa|u\.s\.a?\.?|us|nyc)\b|\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b/i;
 
 function isUsLocationSegment(segment: string): boolean {
   const s = segment.trim();
-  if (!s) return true; // no text to judge — don't drop on missing data
+  if (!s) return false;
   if (NON_US_LOCATION_RE.test(s)) return false;
   if (US_EXPLICIT_RE.test(s) || US_STATE_ABBR_RE.test(s)) return true;
-  if (/^\d+\s+locations?$/i.test(s)) return true; // "3 Locations" placeholder — can't verify, keep
-  if (/^remote$/i.test(s)) return true; // bare "Remote" with no country qualifier
-  // Bare city name we don't recognize as foreign and can't confirm as US
-  // either (e.g. "San Francisco" with no state suffix). Default to keep —
-  // over-hiding a real US posting is worse than an occasional unverifiable one.
-  return true;
+  return false;
 }
 
 export function isUsLocation(location: string): boolean {
-  if (!location) return true;
-  const segments = location.split(";").map((s) => s.trim()).filter(Boolean);
-  if (segments.length === 0) return true;
-  return segments.some(isUsLocationSegment);
+  if (!location.trim()) return false;
+  const segments = location.split(/[;|\n]/).map((s) => s.trim()).filter(Boolean);
+  return segments.length > 0 && segments.every(isUsLocationSegment);
 }
 
 async function dispatchFetch(c: CompanyConfig): Promise<NormalizedJob[]> {
