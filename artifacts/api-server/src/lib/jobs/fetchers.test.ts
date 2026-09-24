@@ -9,6 +9,7 @@ import {
   fetchLever,
   fetchGreenhouse,
   fetchWorkday,
+  fetchForCompany,
   fetchOracle,
   fetchJaneStreet,
   fetchApple,
@@ -1816,6 +1817,40 @@ describe("fetchWorkday — APM title filtering and field mapping", () => {
     expect(job!.source).toBe("workday");
     expect(job!.companySlug).toBe("salesforce");
     expect(job!.postedOn).toBe("2026-06-01");
+  });
+
+  it("finds Adobe's 2027 University Graduate Product Manager through its configured Workday search", async () => {
+    const adobe = COMPANIES.find((company) => company.slug === "adobe")!;
+    const mockFetch = stubFetch(makeWorkdayResponse([
+      {
+        title: "2027 University Graduate - Product Manager",
+        externalPath:
+          "/job/San-Jose/XMLNAME-2027-University-Graduate---Product-Manager_R171844",
+        locationsText: "San Jose",
+        postedOn: "Posted Today",
+        bulletFields: ["R171844"],
+      },
+      {
+        title: "2027 University Graduate - Software Engineer",
+        externalPath: "/job/San-Jose/XMLNAME-2027-University-Graduate---Software-Engineer_R172083",
+        locationsText: "San Jose, CA",
+        bulletFields: ["R172083"],
+      },
+    ]));
+
+    const jobs = await fetchForCompany(adobe);
+    if (!Array.isArray(jobs)) throw new Error("Adobe feed unexpectedly unavailable");
+    const [, request] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(request.body as string).searchText).toBe(
+      "university graduate product manager",
+    );
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      title: "2027 University Graduate - Product Manager",
+      location: "San Jose, CA, United States",
+      applyUrl:
+        "https://adobe.wd5.myworkdayjobs.com/en-US/external_experienced/job/San-Jose/XMLNAME-2027-University-Graduate---Product-Manager_R171844",
+    });
   });
 
   it("falls back to externalPath for id when bulletFields is absent", async () => {

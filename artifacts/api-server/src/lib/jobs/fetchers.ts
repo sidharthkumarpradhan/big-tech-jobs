@@ -320,7 +320,8 @@ export async function fetchWorkday(c: CompanyConfig): Promise<NormalizedJob[]> {
       title: j.title,
       company: c.name,
       companySlug: c.slug,
-      location: j.locationsText ?? "Unspecified",
+      location:
+        wd.locationOverrides?.[j.externalPath] ?? j.locationsText ?? "Unspecified",
       applyUrl: `https://${wd.host}/en-US/${wd.tenant}${j.externalPath}`,
       source: "workday",
       postedOn: j.postedOn ?? null,

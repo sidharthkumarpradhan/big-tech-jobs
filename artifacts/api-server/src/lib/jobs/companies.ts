@@ -42,6 +42,8 @@ export interface CompanyConfig {
      * trusted purely because they came back from a narrowed search.
      */
     titleMatch?: RegExp;
+    /** Verified replacement locations keyed by exact Workday externalPath. */
+    locationOverrides?: Record<string, string>;
   };
   /**
    * Oracle Recruiting Cloud (ORC). Note: the public-facing careers.* domain is
@@ -195,7 +197,17 @@ export const COMPANIES: CompanyConfig[] = [
   { name: "PNC", slug: "pnc", ats: "workday", programName: "APM Program", programStatus: "active",
     workday: { host: "pnc.wd5.myworkdayjobs.com", company: "pnc", tenant: "External" } },
   { name: "Adobe", slug: "adobe", ats: "workday", programName: "APM Program", programStatus: "active",
-    workday: { host: "adobe.wd5.myworkdayjobs.com", company: "adobe", tenant: "external_experienced" } },
+    workday: {
+      host: "adobe.wd5.myworkdayjobs.com",
+      company: "adobe",
+      tenant: "external_experienced",
+      searchText: "university graduate product manager",
+      titleMatch: /\buniversity graduate\b.*\bproduct manager\b/i,
+      locationOverrides: {
+        "/job/San-Jose/XMLNAME-2027-University-Graduate---Product-Manager_R171844":
+          "San Jose, CA, United States",
+      },
+    } },
   { name: "Warner Bros. Discovery", slug: "wbd", ats: "workday", programName: "APM Program", programStatus: "active",
     workday: { host: "warnerbros.wd5.myworkdayjobs.com", company: "warnerbros", tenant: "global" } },
   { name: "New Balance", slug: "new-balance", ats: "workday", programName: "APM Program", programStatus: "active",
