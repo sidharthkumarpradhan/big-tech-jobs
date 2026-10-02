@@ -221,6 +221,59 @@ async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
   return res.json();
 }
 
+/** Amazon's public search feed, verified to return the ALA full-time and intern roles. */
+export async function fetchAmazon(c: CompanyConfig): Promise<NormalizedJob[]> {
+  const query = new URLSearchParams({
+    base_query: "Amazon Leadership Accelerator Product Manager",
+    "country[]": "USA",
+    result_limit: "100",
+    job_count: "100",
+    sort: "relevant",
+  });
+  const data = (await fetchJson(`https://www.amazon.jobs/en/search.json?${query}`)) as {
+    error?: unknown;
+    hits?: number;
+    jobs?: Array<{
+      title?: string;
+      job_path?: string;
+      city?: string;
+      state?: string;
+      country_code?: string;
+      posted_date?: string;
+      description?: string;
+      basic_qualifications?: string;
+      preferred_qualifications?: string;
+    }>;
+  };
+  if (!data || data.error || !Array.isArray(data.jobs)) {
+    throw new Error("fetchAmazon: search response changed or returned an error — expected a jobs array");
+  }
+  if (typeof data.hits === "number" && data.hits > data.jobs.length) {
+    throw new Error("fetchAmazon: search results are incomplete — pagination needs re-verification");
+  }
+  return data.jobs
+    .filter((j) => matchesApmTitle(j.title ?? "", c))
+    .filter((j) => isWithinExperienceCap(stripHtml(
+      [j.description, j.basic_qualifications, j.preferred_qualifications].filter(Boolean).join(" "),
+    )))
+    .map((j) => {
+      const jobId = j.job_path?.match(/^\/en\/jobs\/(\d+)\//)?.[1];
+      if (!jobId) throw new Error("fetchAmazon: matching job is missing a valid official job path");
+      const postedDate = j.posted_date ? new Date(j.posted_date) : null;
+      return {
+        id: `${c.slug}-${jobId}`,
+        title: j.title!,
+        company: c.name,
+        companySlug: c.slug,
+        location: [j.city, j.state, j.country_code].filter(Boolean).join(", ") || "Unspecified",
+        applyUrl: `https://www.amazon.jobs${j.job_path}`,
+        source: "amazon",
+        postedOn: postedDate && !Number.isNaN(postedDate.getTime())
+          ? postedDate.toISOString().slice(0, 10) : null,
+      };
+    });
+}
+
 export async function fetchGreenhouse(c: CompanyConfig): Promise<NormalizedJob[]> {
   const data = (await fetchJson(
     `https://boards-api.greenhouse.io/v1/boards/${c.boardSlug}/jobs?content=true`,
@@ -1137,6 +1190,7 @@ async function dispatchFetch(c: CompanyConfig): Promise<NormalizedJob[]> {
     case "ashby":
       return fetchAshby(c);
     case "custom":
+      if (c.slug === "amazon") return fetchAmazon(c);
       if (c.slug === "google") return fetchGoogle(c);
       if (c.slug === "atlassian") return fetchAtlassian(c);
       if (c.slug === "intuit") return fetchIntuit(c);

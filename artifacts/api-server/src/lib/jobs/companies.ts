@@ -134,6 +134,17 @@ export const COMPANIES: CompanyConfig[] = [
   // not a blocked feed.
   { name: "Microsoft", slug: "microsoft", ats: "custom", programName: "Program Manager University Grad", programStatus: "active" },
   // Custom
+  // Amazon's public search.json feed includes both ALA full-time and internship
+  // postings. The company-specific alias admits the MBA full-time program only.
+  { name: "Amazon", slug: "amazon", ats: "custom", programName: "Leadership Accelerator (MBA)", programStatus: "active",
+    careersUrl: "https://www.amazon.jobs/en/search?base_query=Amazon+Leadership+Accelerator+Product+Manager",
+    titleAliases: ["Amazon Leadership Accelerator (ALA) - Product Manager Full Time"] },
+  // Cisco's Phenom careers site's apply links reveal this verified Workday tenant.
+  // Specialist I/II titles are its early-career product-management naming;
+  // the common matcher still excludes their internship versions.
+  { name: "Cisco", slug: "cisco", ats: "workday", programName: "Early-Career Product Management", programStatus: "active",
+    workday: { host: "cisco.wd5.myworkdayjobs.com", company: "cisco", tenant: "Cisco_Careers" },
+    titleAliases: ["Engineering Product Management Specialist I (Full", "Engineering Product Management Specialist II (Full"] },
   { name: "Google", slug: "google", ats: "custom", programName: "APM Program", programStatus: "active" },
   // Uber migrated its careers site (jobs.uber.com) to a Next.js app on Vercel,
   // which broke the old www.uber.com/api/loadSearchJobsResults endpoint

@@ -139,7 +139,7 @@ function LandingPage() {
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
               APM Radar tracks full-time APM, RPM, and equivalent product,
-              project, and program-manager openings across 66 companies.
+              project, and program-manager openings across 68 companies.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link

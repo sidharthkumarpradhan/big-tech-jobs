@@ -13,6 +13,7 @@ import {
   fetchOracle,
   fetchJaneStreet,
   fetchApple,
+  fetchAmazon,
   isApmTitle,
   isInternshipTitle,
   matchesApmTitle,
@@ -423,6 +424,91 @@ function stubFetch(payload: unknown) {
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("Amazon — verified public search feed", () => {
+  const amazon = COMPANIES.find((c) => c.slug === "amazon")!;
+  const fullTime = {
+    title: "2027 Amazon Leadership Accelerator (ALA) - Product Manager Full Time",
+    job_path: "/en/jobs/10490981/2027-amazon-leadership-accelerator-ala-product-manager-full-time",
+    city: "Seattle", state: "WA", country_code: "USA",
+    posted_date: "August  3, 2026",
+    preferred_qualifications: "3+ years of professional experience",
+  };
+
+  it("requests US ALA jobs and maps the full-time role, excluding internships and senior PMs", async () => {
+    const mockFetch = stubFetch({ error: null, hits: 3, jobs: [
+      fullTime,
+      { ...fullTime, title: "2027 Amazon Leadership Accelerator (ALA) Product Manager Internship" },
+      { ...fullTime, title: "Senior Product Manager" },
+    ] });
+    const jobs = await fetchForCompany(amazon);
+    const url = new URL(mockFetch.mock.calls[0][0]);
+    expect(url.origin + url.pathname).toBe("https://www.amazon.jobs/en/search.json");
+    expect(url.searchParams.get("country[]")).toBe("USA");
+    expect(url.searchParams.get("base_query")).toBe("Amazon Leadership Accelerator Product Manager");
+    expect(jobs).toEqual([{
+      id: "amazon-10490981", title: fullTime.title, company: "Amazon", companySlug: "amazon",
+      location: "Seattle, WA, USA", applyUrl: `https://www.amazon.jobs${fullTime.job_path}`,
+      source: "amazon", postedOn: "2026-08-03",
+    }]);
+  });
+
+  it("retains strict US-only location filtering even if the feed ignores its country parameter", async () => {
+    stubFetch({ hits: 3, jobs: [
+      fullTime,
+      { ...fullTime, city: "London", state: "", country_code: "GBR" },
+      { ...fullTime, city: "", state: "", country_code: "" },
+    ] });
+    expect(await fetchForCompany(amazon)).toHaveLength(1);
+  });
+
+  it("excludes roles exceeding the existing four-year experience cap", async () => {
+    stubFetch({ hits: 1, jobs: [{ ...fullTime, preferred_qualifications: "5+ years of professional experience" }] });
+    expect(await fetchAmazon(amazon)).toEqual([]);
+  });
+
+  it.each([{ results: [] }, { error: "search failed", jobs: [] }, null])(
+    "throws rather than silently treating a changed/error response as no openings: %j",
+    async (payload) => {
+      stubFetch(payload);
+      await expect(fetchAmazon(amazon)).rejects.toThrow("fetchAmazon");
+    },
+  );
+
+  it("allows a genuine empty feed", async () => {
+    stubFetch({ error: null, hits: 0, jobs: [] });
+    expect(await fetchAmazon(amazon)).toEqual([]);
+  });
+
+  it("rejects truncated search results", async () => {
+    stubFetch({ hits: 2, jobs: [fullTime] });
+    await expect(fetchAmazon(amazon)).rejects.toThrow("incomplete");
+  });
+});
+
+describe("Cisco — verified Workday config", () => {
+  it("routes to Cisco's tenant and accepts only full-time early-career US product roles", async () => {
+    const cisco = COMPANIES.find((c) => c.slug === "cisco")!;
+    const fullTime = {
+      title: "Engineering Product Management Specialist I (Full Time) – United States",
+      externalPath: "/job/San-Jose-California-US/Product-Management-Specialist_123",
+      locationsText: "San Jose, California, US", bulletFields: ["123"],
+    };
+    const mockFetch = stubFetch({ jobPostings: [
+      fullTime,
+      { ...fullTime, title: "Engineering Product Management Specialist I (Intern) – United States" },
+      { ...fullTime, title: "Senior Product Manager" },
+      { ...fullTime, title: "Associate Product Manager", locationsText: "London, United Kingdom" },
+      { ...fullTime, locationsText: "4 Locations" },
+    ] });
+    const jobs = await fetchForCompany(cisco);
+    expect(mockFetch.mock.calls[0][0]).toBe("https://cisco.wd5.myworkdayjobs.com/wday/cxs/cisco/Cisco_Careers/jobs");
+    expect(jobs).toHaveLength(1);
+    expect(jobs).toEqual([expect.objectContaining({
+      companySlug: "cisco", title: fullTime.title, location: fullTime.locationsText,
+    })]);
+  });
 });
 
 // ---------------------------------------------------------------------------
